@@ -1,0 +1,330 @@
+---
+title: "CS498 Homework 1"
+author: "Xinchen Pan"
+date: "January 30, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(results = "hide")
+knitr::opts_chunk$set(warning = FALSE)
+```
+
+
+```{r,message=FALSE}
+#package used
+library(caret)
+library(klaR)
+```
+
+
+##3.1
+
+Firstly I loaded the data set and used \texttt{createDataPartition} to get \(80\%\) of the data set for training and \(20\%\) for testing. I built the naive bayes classifier following 
+
+\[
+\begin{aligned}
+p(y|x)&=\frac{p(x|y)p(y)}{p(x)}\\
+&=\frac{\prod_i p(x_i|y)p(y)}{p(x)}\\
+&\propto \prod_ip(x_i|y)p(y)
+\end{aligned}
+\]
+
+We then choose the largest value of \(p(y|x)\). We assume each predictor follows a Gassusian normal distribution and is independent. 
+
+In my code, I created the bayes classifier with my training data first. Then I used testing data to test. 
+
+**(a)**
+```{r,3a}
+train_score <- array(dim=10) #empty array holding values
+test_score <- array(dim=10)
+#load the data 
+dt <- read.csv("pima-indians-diabetes.data", header = F)
+
+for(i in 1:10){
+X <- dt[,-c(9)] # features
+Y <- dt[,9] # label
+
+split <- createDataPartition(dt$V9, p = 0.8, list = FALSE)
+#create partition
+
+dt_trainX <- X[split, ] #train_x
+dt_trainY <- Y[split] #train_y
+dt_testX <- X[-split, ] #test_x
+dt_testY <- Y[-split] #test_y
+
+flag <- dt_trainY > 0 #an indicator for y
+ptrain_flag <- dt_trainX[flag, ] # all 1 for train
+ntrain_flag <- dt_trainX[!flag, ] #all 0 for train
+
+#mean and standard deviation for each column
+ptrain_mean <- sapply(ptrain_flag, mean, na.rm = TRUE)
+ntrain_mean <- sapply(ntrain_flag, mean, na.rm = TRUE)
+ptrain_sd <- sapply(ptrain_flag, sd, na.rm = TRUE)
+ntrain_sd <- sapply(ntrain_flag, sd, na.rm = TRUE)
+
+# (x-mu)/sigma for y=1 case
+p_train_offset <- t(t(dt_trainX) - ptrain_mean)  
+p_train_scales <- t(t(p_train_offset) / ptrain_sd) 
+
+# (x-mu)/sigma for y=0 case
+n_train_offset <- t(t(dt_trainX) - ntrain_mean)
+n_train_scales <- t(t(n_train_offset)/ ntrain_sd) 
+
+#we take log 
+p_log_train <- -(1/2)*rowSums(apply(p_train_scales, c(1,2), function(x) x^2), na.rm = TRUE) - sum(log(ptrain_sd))
+
+#probability for n=1 case
+p_train <- sum(dt_trainY) / length(dt_trainY)
+n_train <- 1 - p_train # n=0 case
+
+# we need to add log(p_train) 
+p_result <- p_log_train + log(p_train) 
+
+#we do the same thing for n case
+n_log_train <- -(1/2)*rowSums(apply(n_train_scales, c(1,2), function(x) x^2), na.rm = TRUE) - sum(log(ntrain_sd))
+
+#same
+n_result <- n_log_train + log(n_train)
+
+#we compare the result to decide the classification
+train_comparsion <- p_result > n_result
+
+#compare with the trainY
+right_train <- train_comparsion == dt_trainY
+
+#get the train accuracy
+train_score[i] <-sum(right_train )/(sum(right_train )+sum(!right_train ))
+
+########### test ############
+# train_mean and train_sd should not be changed
+
+p_test_offset <- t(t(dt_testX) - ptrain_mean)
+p_test_scales <- t(t(p_test_offset)) / ptrain_sd
+
+n_test_offset <- t(t(dt_testX) - ntrain_mean)
+n_test_scales <- t(t(n_test_offset)) / ntrain_sd
+
+p_log_test <- -(1/2)*rowSums(apply(p_test_scales, c(1,2), function(x) x^2), na.rm = TRUE) - sum(log(ptrain_sd))
+n_log_test <- -(1/2)*rowSums(apply(n_test_scales, c(1,2), function(x) x^2), na.rm = TRUE) - sum(log(ntrain_sd))
+
+p_test <- sum(dt_testY) / length(dt_testY)
+n_test <- 1 - p_test
+p_result1 <- p_log_test + log(p_test)
+n_result1 <- n_log_test + log(n_test)
+test_comparsion <- p_result1 > n_result1
+
+right_test <- test_comparsion == dt_testY
+
+test_score[i] <- sum(right_test )/(sum(right_test )+sum(!right_test ))}
+
+mean(train_score)
+mean(test_score)
+```
+
+The training accuracy I got from the bayes classifier I made is `r mean(train_score)`, the test accuracy I got is `r mean(test_score)`.
+
+**(b)**
+
+```{r}
+newX <- X
+
+for (i in c(3, 5, 6, 8)) # change from 0 to NA
+{qq <- X[, i]==0
+ newX[qq, i] = NA
+}
+
+train_score <- array(dim=10)
+test_score <- array(dim=10)
+
+for(i in 1:10){
+
+split <- createDataPartition(dt$V9, p = 0.8, list = FALSE)
+
+dt_trainX <- newX[split, ]
+dt_trainY <- Y[split]
+dt_testX <- newX[-split, ]
+dt_testY <- Y[-split]
+
+flag <- dt_trainY > 0
+ptrain_flag <- dt_trainX[flag, ]
+ntrain_flag <- dt_trainX[!flag, ]
+
+ptrain_mean <- sapply(ptrain_flag, mean, na.rm = TRUE)
+ntrain_mean <- sapply(ntrain_flag, mean, na.rm = TRUE)
+ptrain_sd <- sapply(ptrain_flag, sd, na.rm = TRUE)
+ntrain_sd <- sapply(ntrain_flag, sd, na.rm = TRUE)
+
+p_train_offset <- t(t(dt_trainX) - ptrain_mean)
+p_train_scales <- t(t(p_train_offset)/ ptrain_sd) 
+
+
+n_train_offset <- t(t(dt_trainX) - ntrain_mean)
+n_train_scales <- t(t(n_train_offset)/ ntrain_sd) 
+
+
+p_log_train <- -(1/2)*rowSums(apply(p_train_scales, c(1,2), function(x) x^2), na.rm = TRUE) - sum(log(ptrain_sd))
+
+p_train <- sum(dt_trainY) / length(dt_trainY)
+n_train <- 1 - p_train
+
+p_result <- p_log_train + log(p_train)
+
+n_log_train <- -(1/2)*rowSums(apply(n_train_scales, c(1,2), function(x) x^2), na.rm = TRUE) - sum(log(ntrain_sd))
+
+n_result <- n_log_train + log(n_train)
+
+
+train_comparsion <- p_result > n_result
+
+right_train <- train_comparsion == dt_trainY
+
+
+train_score[i] <-sum(right_train )/(sum(right_train )+sum(!right_train ))
+
+
+####test
+
+p_test_offset <- t(t(dt_testX) - ptrain_mean)
+p_test_scales <- t(t(p_test_offset)) / ptrain_sd
+
+
+n_test_offset <- t(t(dt_testX) - ntrain_mean)
+n_test_scales <- t(t(n_test_offset)) / ntrain_sd
+
+
+p_log_test <- -(1/2)*rowSums(apply(p_test_scales, c(1,2), function(x) x^2), na.rm = TRUE) - sum(log(ptrain_sd))
+
+n_log_test <- -(1/2)*rowSums(apply(n_test_scales, c(1,2), function(x) x^2), na.rm = TRUE) - sum(log(ntrain_sd))
+
+
+p_test <- sum(dt_testY) / length(dt_testY)
+
+n_test <- 1 - p_test
+
+p_result1 <- p_log_test + log(p_test)
+
+
+n_result1 <- n_log_test + log(n_test)
+
+
+test_comparsion <- p_result1 > n_result1
+
+right_test <- test_comparsion == dt_testY
+
+test_score[i] <-sum(right_test )/(sum(right_test )+sum(!right_test ))}
+
+mean(train_score)
+mean(test_score)
+```
+
+
+We have a lot of 0 in the data set, so I changed all 0 to \texttt{NA} as questions said. There is basically no change for the training accuracy which is `r mean(train_score)`. The test accuracy increased to `r mean(test_score)`. 
+
+
+**(c)**
+
+```{r,warning=FALSE,message=FALSE}
+split <- createDataPartition(dt$V9, p = 0.8, list = FALSE)
+
+dt_trainX <- X[split, ]
+dt_trainY <- Y[split]
+dt_testX <- X[-split, ]
+dt_testY <- Y[-split]
+
+nb <- train(dt_trainX, as.factor(dt_trainY), method = 'nb', trControl = trainControl(method = 'cv', number = 10))
+nb
+
+test_nb <- predict(nb, dt_testX)
+mean(test_nb == dt_testY)
+```
+
+The training accuracy I got by use \texttt{caret} package using 10-fold cross validation is about 0.7563882 and the test accuracy is about 0.751634.
+
+**(d)**
+
+```{r}
+dt_trainX <- X[split, ]
+dt_trainY <- Y[split]
+dt_testX <- X[-split, ]
+dt_testY <- Y[-split]
+
+svm <- svmlight(dt_trainX, as.factor(dt_trainY), pathsvm='C:/Users/Xinchen/Desktop/cs498/svm_light')
+
+labels_train <- predict(svm, dt_trainX)
+foo_train <- labels_train$class
+accuarcy_train <- sum(foo_train==dt_trainY)/(sum(foo_train==dt_trainY)+sum(!(foo_train==dt_trainY)))
+
+labels <- predict(svm, dt_testX)
+foo <- labels$class
+
+accuracy <- sum(foo==dt_testY)/(sum(foo==dt_testY)+sum(!(foo==dt_testY)))
+```
+For this problem I used \texttt{svmlight} for doing support vector machine algorithm. I used \(80\%\) for training and \(20\%\) for testing. The training accuracy is about `r accuarcy_train`. I got an accuracy of `r accuracy ` for testing. 
+
+##3.3
+
+**(a)**
+```{r}
+ht <- read.table("processed.cleveland.data", sep = ",")
+
+bin <- ifelse(ht$V14 > 0, 1, 0)  #make an indicator variable
+ht$bin <- bin
+ht$V14 <- NULL
+
+X <- ht[,-c(14)] # features
+Y <- ht[,14] # label
+
+test_score1 <- array(dim=10)
+
+for(i in 1:10){
+split <- createDataPartition(ht$bin, p = 0.85, list = FALSE)
+
+ht_trainX <- X[split, ]
+ht_trainY <- Y[split]
+ht_testX <- X[-split, ]
+ht_testY <- Y[-split]
+
+nb1 <- train(ht_trainX, as.factor(ht_trainY), method = 'nb', trControl = trainControl(method = 'cv', number = 10))
+nb1
+test_nb1 <- predict(nb1, ht_testX)
+test_score1[i] <- mean(test_nb1 == ht_testY)
+}
+mean(test_score1)
+sd(test_score1)
+```
+
+For this problem, I firstly created a new variable based on the response variable. If response variabe is greater than 0, then I set it to 1, else set it to 0. Then I used \(85\%\) of the data for training and \(15\%\) for testing. I ran the model ten times and reported the mean and the standard deviation of the accuracy. The  accuracy for the training data is about 0.8092308. The test accuracy is about  `r mean(test_score1) `. The standard deviation is about `r sd(test_score1)`.
+
+
+**(b)**
+```{r,warning=FALSE}
+ht <- read.table("processed.cleveland.data", sep = ",")
+
+X <- ht[,-c(14)] # features
+Y <- ht[,14] # label
+
+test_score2 <- array(dim=10)
+
+for(i in 1:10){
+
+split <- createDataPartition(ht$V14, p = 0.85, list = FALSE)
+
+ht_trainX <- X[split, ]
+ht_trainY <- Y[split]
+ht_testX <- X[-split, ]
+ht_testY <- Y[-split]
+
+
+nb2 <- train(ht_trainX, as.factor(ht_trainY), method = 'nb', trControl = trainControl(method = 'cv', number = 10))
+nb2
+test_nb2 <- predict(nb2, ht_testX)
+test_score2[i] <- mean(test_nb2 == ht_testY)
+
+}
+mean(test_score2)
+sd(test_score2)
+```
+
+We do not do any change for the response variable. I ran the model ten times and got a training accuracy of  0.5645499. The testing accuracy is `r mean(test_score2)` . The standard deviation is `r sd(test_score2)`.
